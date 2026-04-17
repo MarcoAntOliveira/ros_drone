@@ -328,14 +328,22 @@ void OffboardControl::timer_callback()
         offboard_setpoint_counter_++;
     }
 }
- LifecycleCallbackReturn on_configure(const rclcpp_lifecycle::State &previous_state)
+
+//     void set_target_position(float x, float y, float z, float yaw) {
+//     x_ = x;
+//     y_ = y;
+//     z_ = z;
+//     my_yaw = yaw;
+//     }
+
+ LifecycleCallbackReturn OffboardControl::on_configure(const rclcpp_lifecycle::State &previous_state)
     {
         (void)previous_state;
         RCLCPP_INFO(this->get_logger(), "IN on_configure");
 
 
 	// 1. QoS para Comandos (Reliable - o que você já tinha)
-	auto qos_reliable = rclcpp::QoS(rclcpp::KeepLast(10));
+	//auto qos_reliable = rclcpp::QoS(rclcpp::KeepLast(10));
 
 	// 2. QoS para Sensores/Telemetria (Best Effort - para o EscReport)
 	rmw_qos_profile_t qos_profile_sensor = rmw_qos_profile_sensor_data;
@@ -359,10 +367,11 @@ void OffboardControl::timer_callback()
 		std::bind(&OffboardControl::position_callback, this, std::placeholders::_1)
 	);
         // Timer começa parado (não publica ainda)
-        number_timer_->cancel();
+        this->number_timer_->cancel();
 
         return LifecycleCallbackReturn::SUCCESS;
     }
+
 
     /**
      * @brief Callback chamado quando o nó é ATIVADO.
@@ -374,7 +383,7 @@ void OffboardControl::timer_callback()
      * - Ativar o publisher
      * - Iniciar o timer (começa a publicar)
      */
-    LifecycleCallbackReturn on_activate(const rclcpp_lifecycle::State &previous_state)
+    LifecycleCallbackReturn OffboardControl::on_activate(const rclcpp_lifecycle::State &previous_state)
     {
 	// 1. Sempre publique o modo e verifique o contador para armar
 	if (offboard_setpoint_counter_ == 10) {
@@ -434,7 +443,10 @@ void OffboardControl::timer_callback()
 	if (offboard_setpoint_counter_ < 11) {
 		offboard_setpoint_counter_++;
 	}
+
+	return LifecycleCallbackReturn::SUCCESS;
     }
+ 
 
     /**
      * @brief Callback chamado quando o nó é DESATIVADO.
@@ -446,36 +458,49 @@ void OffboardControl::timer_callback()
      * - Parar o timer
      * - Parar publicação de mensagens
      */
-    LifecycleCallbackReturn on_deactivate(const rclcpp_lifecycle::State &previous_state)
+    LifecycleCallbackReturn OffboardControl::on_deactivate(const rclcpp_lifecycle::State &previous_state)
     {
         RCLCPP_INFO(this->get_logger(), "IN on_deactivate");
 
-        number_timer_->cancel();
+        this->number_timer_->cancel();
+	if (x_ != 0.0 || y_ != 0.0 || z_ != 0.0) {
+	// Enviar comando para pousar (LAND)
+	TrajectorySetpoint msg{};
+	msg.position = {x_, y_, 0.0};  // Mantém posição horizontal, mas busca o solo
+	msg.yaw = -3.14; // Valor de yaw pode ser mantido ou ajustado conforme necessário
+	msg.timestamp = this->get_clock()->now().nanoseconds() / 1000;
+	trajectory_setpoint_publisher_->publish(msg);
+
+	RCLCPP_INFO(this->get_logger(), "🛬 Iniciando pouso...");
+	}
+
+    if (offboard_setpoint_counter_ < 11) {
+	}
 
         rclcpp_lifecycle::LifecycleNode::on_deactivate(previous_state);
 
         return LifecycleCallbackReturn::SUCCESS;
     }
 
-    /**
-     * @brief Callback chamado no estado CLEANUP.
-     *
-     * @param previous_state Estado anterior
-     * @return SUCCESS se limpeza ocorrer corretamente
-     *
-     * Responsabilidades:
-     * - Liberar recursos (publisher e timer)
-     */
-    LifecycleCallbackReturn on_cleanup(const rclcpp_lifecycle::State &previous_state)
-    {
-        (void)previous_state;
-        RCLCPP_INFO(this->get_logger(), "IN on_cleanup");
+//     /**
+//      * @brief Callback chamado no estado CLEANUP.
+//      *
+//      * @param previous_state Estado anterior
+//      * @return SUCCESS se limpeza ocorrer corretamente
+//      *
+//      * Responsabilidades:
+//      * - Liberar recursos (publisher e timer)
+//      */
+//     LifecycleCallbackReturn on_cleanup(const rclcpp_lifecycle::State &previous_state)
+//     {
+//         (void)previous_state;
+//         RCLCPP_INFO(this->get_logger(), "IN on_cleanup");
 
-        number_publisher_.reset();
-        number_timer_.reset();
+//         number_publisher_.reset();
+//         number_timer_.reset();
 
-        return LifecycleCallbackReturn::SUCCESS;
-    }
+//         return LifecycleCallbackReturn::SUCCESS;
+//     }
 
     /**
      * @brief Callback chamado durante o SHUTDOWN.
@@ -486,13 +511,22 @@ void OffboardControl::timer_callback()
      * Responsabilidades:
      * - Liberar recursos antes de encerrar o nó
      */
-    LifecycleCallbackReturn on_shutdown(const rclcpp_lifecycle::State &previous_state)
+    LifecycleCallbackReturn OffboardControl::on_shutdown(const rclcpp_lifecycle::State &previous_state)
     {
         (void)previous_state;
         RCLCPP_INFO(this->get_logger(), "IN on_shutdown");
 
-        number_publisher_.reset();
-        number_timer_.reset();
+	if (x_ != 0.0 || y_ != 0.0 || z_ != 0.0) {
+	// Enviar comando para pousar (LAND)
+	TrajectorySetpoint msg{};
+	msg.position = {x_, y_, 0.0};  // Mantém posição horizontal, mas busca o solo
+	msg.yaw = -3.14; // Valor de yaw pode ser mantido ou ajustado conforme necessário
+	msg.timestamp = this->get_clock()->now().nanoseconds() / 1000;
+	trajectory_setpoint_publisher_->publish(msg);
+
+	RCLCPP_INFO(this->get_logger(), "🛬 Iniciando pouso...");
+	}        
+        this->number_timer_.reset();
 
         return LifecycleCallbackReturn::SUCCESS;
     }
@@ -507,13 +541,13 @@ void OffboardControl::timer_callback()
      * - Limpar recursos
      * - Indicar erro para o sistema
      */
-    LifecycleCallbackReturn on_error(const rclcpp_lifecycle::State &previous_state)
+    LifecycleCallbackReturn OffboardControl::on_error(const rclcpp_lifecycle::State &previous_state)
     {
         (void)previous_state;
         RCLCPP_INFO(this->get_logger(), "IN on_error");
 
-        number_publisher_.reset();
-        number_timer_.reset();
+        
+        this->number_timer_.reset();
 
 		return LifecycleCallbackReturn::FAILURE;
     }

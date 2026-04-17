@@ -40,7 +40,11 @@ target_include_directories(frame_transforms PUBLIC
 )
 
 
-add_executable(offboard src/mission1/mission_cycle.cpp)
+add_executable(
+	offboard
+	src/mission1/main.cpp
+	src/mission1/mission_cycle.cpp
+)
 ament_target_dependencies(offboard  rclcpp px4_msgs my_px4_interfaces rclcpp_action builtin_interfaces rclcpp_lifecycle)
 install(TARGETS offboard DESTINATION lib/${PROJECT_NAME})
 

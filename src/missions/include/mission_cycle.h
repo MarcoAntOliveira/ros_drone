@@ -88,6 +88,16 @@ private:
 	void timer_callback2();
 	void actuator_outputs_callback(const px4_msgs::msg::ActuatorOutputs::SharedPtr msg);
 	void esc_report_callback(const px4_msgs::msg::EscReport::SharedPtr msg);
+	LifecycleCallbackReturn on_activate(const rclcpp_lifecycle::State &previous_state);
+	LifecycleCallbackReturn on_deactivate(const rclcpp_lifecycle::State &previous_state);
+	LifecycleCallbackReturn on_configure(const rclcpp_lifecycle::State &previous_state);
+    	LifecycleCallbackReturn on_shutdown(const rclcpp_lifecycle::State &previous_state);
+	LifecycleCallbackReturn on_error(const rclcpp_lifecycle::State &previous_state);
+
+   
+
+	// No OffboardControl.h (dentro de public:)
+
 	void timer_callback3();
 
 };
